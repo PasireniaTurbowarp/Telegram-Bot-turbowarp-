@@ -1,0 +1,501 @@
+class TelegramBotExtension {
+  constructor() {
+    this.token = '';
+    this.defaultChatId = '';
+    this.keyboard = [];
+
+    this.lastUpdateId = 0;
+    this.messageQueue = [];
+    this.pollingInterval = null;
+    this.isPolling = false;
+
+    this.callbackQueue = [];
+    this.lastConsumedCallback = null;
+  }
+
+  getInfo() {
+    // Твоя ссылка на SVG логотип
+    const iconUrl = 'https://upload.wikimedia.org/wikipedia/commons/8/82/Telegram_logo.svg';
+
+    return {
+      id: 'telegramBot',
+      name: 'Telegram Bot',
+      menuIconURI: iconUrl,
+      blockIconURI: iconUrl,
+      color1: '#0088cc',
+      color2: '#006699',
+      color3: '#004466',
+      blocks: [
+        // ==========================================
+        { blockType: Scratch.BlockType.LABEL, text: '⚙️ Подключение' },
+        {
+          opcode: 'setToken',
+          blockType: Scratch.BlockType.COMMAND,
+          text: 'установить токен бота [TOKEN]',
+          arguments: { TOKEN: { type: Scratch.ArgumentType.STRING, defaultValue: 'Вставь_токен' } }
+        },
+        {
+          opcode: 'setDefaultChatId',
+          blockType: Scratch.BlockType.COMMAND,
+          text: 'установить чат по умолчанию [CHAT_ID]',
+          arguments: { CHAT_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'ID_чата' } }
+        },
+        {
+          opcode: 'checkConnection',
+          blockType: Scratch.BlockType.REPORTER,
+          text: 'проверить подключение к API'
+        },
+
+        // ==========================================
+        { blockType: Scratch.BlockType.LABEL, text: '📤 Отправка сообщений' },
+        {
+          opcode: 'sendMessage',
+          blockType: Scratch.BlockType.COMMAND,
+          text: 'отправить сообщение [TEXT] в чат [CHAT_ID]',
+          arguments: {
+            TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: 'Привет!' },
+            CHAT_ID: { type: Scratch.ArgumentType.STRING, defaultValue: '' }
+          }
+        },
+        {
+          opcode: 'sendPhoto',
+          blockType: Scratch.BlockType.COMMAND,
+          text: 'отправить фото по URL [URL] в чат [CHAT_ID]',
+          arguments: {
+            URL: { type: Scratch.ArgumentType.STRING, defaultValue: 'https://picsum.photos/200' },
+            CHAT_ID: { type: Scratch.ArgumentType.STRING, defaultValue: '' }
+          }
+        },
+        {
+          opcode: 'sendSpriteImage',
+          blockType: Scratch.BlockType.COMMAND,
+          text: 'отправить картинку спрайта [SPRITE] в чат [CHAT_ID]',
+          arguments: {
+            SPRITE: { type: Scratch.ArgumentType.STRING, defaultValue: '' },
+            CHAT_ID: { type: Scratch.ArgumentType.STRING, defaultValue: '' }
+          }
+        },
+        {
+          opcode: 'sendStageImage',
+          blockType: Scratch.BlockType.COMMAND,
+          text: 'отправить снимок всей сцены в чат [CHAT_ID]',
+          arguments: {
+            CHAT_ID: { type: Scratch.ArgumentType.STRING, defaultValue: '' }
+          }
+        },
+
+        // ==========================================
+        { blockType: Scratch.BlockType.LABEL, text: '🔨 Конструктор меню (кнопки)' },
+        { opcode: 'keyboardClear', blockType: Scratch.BlockType.COMMAND, text: 'очистить кнопки меню' },
+        { opcode: 'keyboardNewRow', blockType: Scratch.BlockType.COMMAND, text: 'новая строка кнопок' },
+        {
+          opcode: 'keyboardAddCallback',
+          blockType: Scratch.BlockType.COMMAND,
+          text: 'добавить кнопку [TEXT] с данными [DATA]',
+          arguments: {
+            TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: 'Нажми меня' },
+            DATA: { type: Scratch.ArgumentType.STRING, defaultValue: 'button_1' }
+          }
+        },
+        {
+          opcode: 'keyboardAddUrl',
+          blockType: Scratch.BlockType.COMMAND,
+          text: 'добавить кнопку-ссылку [TEXT] на [URL]',
+          arguments: {
+            TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: 'Открыть сайт' },
+            URL: { type: Scratch.ArgumentType.STRING, defaultValue: 'https://turbowarp.org' }
+          }
+        },
+        { opcode: 'keyboardCount', blockType: Scratch.BlockType.REPORTER, text: 'количество кнопок в меню' },
+        {
+          opcode: 'sendKeyboard',
+          blockType: Scratch.BlockType.COMMAND,
+          text: 'отправить сообщение [TEXT] с меню в чат [CHAT_ID]',
+          arguments: {
+            TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: 'Выберите действие:' },
+            CHAT_ID: { type: Scratch.ArgumentType.STRING, defaultValue: '' }
+          }
+        },
+
+        // ==========================================
+        { blockType: Scratch.BlockType.LABEL, text: '📥 Приём сообщений и команд' },
+        { opcode: 'startReceiving', blockType: Scratch.BlockType.COMMAND, text: 'начать приём сообщений' },
+        { opcode: 'stopReceiving', blockType: Scratch.BlockType.COMMAND, text: 'остановить приём сообщений' },
+        { opcode: 'isReceiving', blockType: Scratch.BlockType.BOOLEAN, text: 'приём активен?' },
+        {
+          opcode: 'isCommandReceived',
+          blockType: Scratch.BlockType.BOOLEAN,
+          text: 'получена команда [COMMAND]?',
+          arguments: { COMMAND: { type: Scratch.ArgumentType.STRING, defaultValue: '/шимбанинка' } }
+        },
+        {
+          opcode: 'isTextReceived',
+          blockType: Scratch.BlockType.BOOLEAN,
+          text: 'получено сообщение с текстом [TEXT]?',
+          arguments: { TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: 'привет' } }
+        },
+        { opcode: 'lastMessage', blockType: Scratch.BlockType.REPORTER, text: 'текст последнего сообщения' },
+        { opcode: 'lastSender', blockType: Scratch.BlockType.REPORTER, text: 'отправитель последнего сообщения' },
+        { opcode: 'queueSize', blockType: Scratch.BlockType.REPORTER, text: 'сообщений в очереди' },
+        { opcode: 'clearQueue', blockType: Scratch.BlockType.COMMAND, text: 'очистить очередь сообщений' },
+
+        // ==========================================
+        { blockType: Scratch.BlockType.LABEL, text: '👆 Нажатия на кнопки' },
+        {
+          opcode: 'isButtonPressed',
+          blockType: Scratch.BlockType.BOOLEAN,
+          text: 'получено нажатие кнопки [DATA]?',
+          arguments: { DATA: { type: Scratch.ArgumentType.STRING, defaultValue: 'button_1' } }
+        },
+        {
+          opcode: 'isAnyButtonPressed',
+          blockType: Scratch.BlockType.BOOLEAN,
+          text: 'получено нажатие любой кнопки?'
+        },
+        { opcode: 'lastPressedData', blockType: Scratch.BlockType.REPORTER, text: 'данные последнего нажатия' },
+        { opcode: 'lastPressedSender', blockType: Scratch.BlockType.REPORTER, text: 'отправитель последнего нажатия' },
+        { opcode: 'callbacksInQueue', blockType: Scratch.BlockType.REPORTER, text: 'нажатий в очереди' },
+        { opcode: 'clearCallbackQueue', blockType: Scratch.BlockType.COMMAND, text: 'очистить очередь нажатий' },
+
+        // ==========================================
+        { blockType: Scratch.BlockType.LABEL, text: '✏️ Редактирование меню' },
+        {
+          opcode: 'editMessageNoButtons',
+          blockType: Scratch.BlockType.COMMAND,
+          text: 'изменить сообщение с кнопкой на [TEXT] (без кнопок)',
+          arguments: { TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: 'Готово!' } }
+        },
+        {
+          opcode: 'editMessageWithMenu',
+          blockType: Scratch.BlockType.COMMAND,
+          text: 'изменить сообщение с кнопкой на [TEXT] (с новым меню)',
+          arguments: { TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: 'Выберите:' } }
+        }
+      ]
+    };
+  }
+
+  // ---------- ВСПОМОГАТЕЛЬНЫЕ ----------
+  _resolveChatId(chatIdArg) {
+    return chatIdArg || this.defaultChatId;
+  }
+
+  async _apiRequest(method, payload = {}) {
+    if (!this.token) return { ok: false, description: 'Токен не установлен.' };
+    const url = `https://api.telegram.org/bot${this.token}/${method}`;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      return await response.json();
+    } catch (e) {
+      console.error('Сетевая ошибка:', e);
+      return { ok: false, description: 'Сетевая ошибка.' };
+    }
+  }
+
+  async _apiRequestFormData(method, formData) {
+    if (!this.token) return { ok: false, description: 'Токен не установлен.' };
+    const url = `https://api.telegram.org/bot${this.token}/${method}`;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData
+      });
+      return await response.json();
+    } catch (e) {
+      console.error('Сетевая ошибка:', e);
+      return { ok: false, description: 'Сетевая ошибка.' };
+    }
+  }
+
+  // ---------- ПОДКЛЮЧЕНИЕ ----------
+  setToken(args) { this.token = args.TOKEN.trim(); }
+  setDefaultChatId(args) { this.defaultChatId = args.CHAT_ID.trim(); }
+
+  async checkConnection() {
+    if (!this.token) return '❌ Сначала установи токен.';
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${this.token}/getMe`);
+      const data = await res.json();
+      return data.ok
+        ? `✅ Подключено! Бот: @${data.result.username}`
+        : `❌ Ошибка: ${data.description}`;
+    } catch (e) {
+      return '❌ Не удалось подключиться к API.';
+    }
+  }
+
+  // ---------- ОТПРАВКА ----------
+  async sendMessage(args) {
+    const chatId = this._resolveChatId(args.CHAT_ID);
+    if (!chatId) return;
+    const result = await this._apiRequest('sendMessage', { chat_id: chatId, text: args.TEXT });
+    if (!result.ok) console.warn('sendMessage:', result.description);
+  }
+
+  async sendPhoto(args) {
+    const chatId = this._resolveChatId(args.CHAT_ID);
+    if (!chatId) return;
+    const result = await this._apiRequest('sendPhoto', { chat_id: chatId, photo: args.URL });
+    if (!result.ok) console.warn('sendPhoto:', result.description);
+  }
+
+  async sendSpriteImage(args) {
+    const chatId = this._resolveChatId(args.CHAT_ID);
+    if (!chatId) return;
+
+    let target = Scratch.vm.editingTarget;
+    if (args.SPRITE && args.SPRITE.trim() !== '') {
+      target = Scratch.vm.runtime.getSpriteTargetByName(args.SPRITE.trim());
+    }
+
+    if (!target || !target.drawableID) {
+      console.warn('Спрайт не найден для отправки картинки');
+      return;
+    }
+
+    const renderer = Scratch.vm.runtime.renderer;
+    let canvas;
+
+    try {
+      if (typeof renderer.extractDrawableScreenSpace === 'function') {
+        canvas = renderer.extractDrawableScreenSpace(target.drawableID);
+      } else {
+        canvas = renderer.extractDrawable(target.drawableID, target.currentCostume, target.direction, target.size, false);
+      }
+    } catch (e) {
+      console.error('Ошибка при извлечении картинки спрайта:', e);
+      return;
+    }
+
+    if (!canvas) return;
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const formData = new FormData();
+      formData.append('chat_id', chatId);
+      formData.append('photo', blob, 'sprite.png');
+
+      const result = await this._apiRequestFormData('sendPhoto', formData);
+      if (!result.ok) console.warn('sendSpriteImage:', result.description);
+    }, 'image/png');
+  }
+
+  async sendStageImage(args) {
+    const chatId = this._resolveChatId(args.CHAT_ID);
+    if (!chatId) return;
+
+    const canvas = Scratch.vm.runtime.renderer.canvas;
+    if (!canvas) return;
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const formData = new FormData();
+      formData.append('chat_id', chatId);
+      formData.append('photo', blob, 'stage.png');
+
+      const result = await this._apiRequestFormData('sendPhoto', formData);
+      if (!result.ok) console.warn('sendStageImage:', result.description);
+    }, 'image/png');
+  }
+
+  // ---------- КНОПКИ ----------
+  keyboardClear() { this.keyboard = []; }
+
+  keyboardNewRow() {
+    const last = this.keyboard[this.keyboard.length - 1];
+    if (!last || last.length > 0) this.keyboard.push([]);
+  }
+
+  _ensureRow() {
+    if (this.keyboard.length === 0) this.keyboard.push([]);
+    return this.keyboard[this.keyboard.length - 1];
+  }
+
+  keyboardAddCallback(args) {
+    this._ensureRow().push({ text: args.TEXT, callback_data: args.DATA.substring(0, 64) });
+  }
+
+  keyboardAddUrl(args) {
+    this._ensureRow().push({ text: args.TEXT, url: args.URL.substring(0, 256) });
+  }
+
+  keyboardCount() {
+    return this.keyboard.reduce((sum, row) => sum + row.length, 0);
+  }
+
+  async sendKeyboard(args) {
+    const chatId = this._resolveChatId(args.CHAT_ID);
+    if (!chatId) return;
+    const cleaned = this.keyboard.filter(row => row.length > 0);
+    const payload = { chat_id: chatId, text: args.TEXT };
+    if (cleaned.length > 0) payload.reply_markup = { inline_keyboard: cleaned };
+    const result = await this._apiRequest('sendMessage', payload);
+    if (!result.ok) console.warn('sendKeyboard:', result.description);
+  }
+
+  // ---------- ПРИЁМ ----------
+  async startReceiving() {
+    if (this.pollingInterval) return;
+    if (!this.token) { console.warn('Сначала установи токен'); return; }
+    await this._apiRequest('deleteWebhook', {});
+    this._poll();
+    this.pollingInterval = setInterval(() => this._poll(), 2000);
+  }
+
+  stopReceiving() {
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+      this.pollingInterval = null;
+    }
+  }
+
+  isReceiving() { return this.pollingInterval !== null; }
+
+  async _poll() {
+    if (this.isPolling) return;
+    this.isPolling = true;
+    try {
+      const data = await this._apiRequest('getUpdates', {
+        offset: this.lastUpdateId + 1,
+        timeout: 0,
+        allowed_updates: ['message', 'callback_query']
+      });
+      if (data.ok && data.result) {
+        for (const update of data.result) {
+          this.lastUpdateId = Math.max(this.lastUpdateId, update.update_id);
+
+          const msg = update.message;
+          if (msg && typeof msg.text === 'string') {
+            this.messageQueue.push({
+              text: msg.text,
+              from: msg.from ? (msg.from.first_name || msg.from.username || 'unknown') : 'unknown',
+              chatId: msg.chat.id,
+              date: msg.date
+            });
+          }
+
+          const cb = update.callback_query;
+          if (cb) {
+            this.callbackQueue.push({
+              data: cb.data || '',
+              from: cb.from ? (cb.from.first_name || cb.from.username || 'unknown') : 'unknown',
+              chatId: cb.message ? cb.message.chat.id : null,
+              messageId: cb.message ? cb.message.message_id : null,
+              callbackId: cb.id
+            });
+          }
+        }
+        if (this.messageQueue.length > 100) this.messageQueue = this.messageQueue.slice(-100);
+        if (this.callbackQueue.length > 100) this.callbackQueue = this.callbackQueue.slice(-100);
+      }
+    } catch (e) {
+      console.error('Ошибка опроса:', e);
+    } finally {
+      this.isPolling = false;
+    }
+  }
+
+  // ---------- ПРОВЕРКИ СООБЩЕНИЙ ----------
+  _matchesCommand(text, command) {
+    if (!command) return false;
+    if (!command.startsWith('/')) return text.toLowerCase().includes(command.toLowerCase());
+    if (!text.startsWith(command)) return false;
+    const rest = text.substring(command.length);
+    return rest === '' || rest.startsWith(' ') || rest.startsWith('@');
+  }
+
+  isCommandReceived(args) {
+    const command = args.COMMAND.trim();
+    if (!command) return false;
+    const idx = this.messageQueue.findIndex(m => this._matchesCommand(m.text, command));
+    if (idx === -1) return false;
+    this.messageQueue.splice(idx, 1);
+    return true;
+  }
+
+  isTextReceived(args) {
+    const needle = args.TEXT.trim().toLowerCase();
+    if (!needle) return false;
+    const idx = this.messageQueue.findIndex(m => m.text.toLowerCase().includes(needle));
+    if (idx === -1) return false;
+    this.messageQueue.splice(idx, 1);
+    return true;
+  }
+
+  lastMessage() {
+    return this.messageQueue.length ? this.messageQueue[this.messageQueue.length - 1].text : '';
+  }
+
+  lastSender() {
+    return this.messageQueue.length ? this.messageQueue[this.messageQueue.length - 1].from : '';
+  }
+
+  queueSize() { return this.messageQueue.length; }
+  clearQueue() { this.messageQueue = []; }
+
+  // ---------- НАЖАТИЯ ----------
+  _consumeCallback(cb) {
+    this.lastConsumedCallback = cb;
+    this._apiRequest('answerCallbackQuery', { callback_query_id: cb.callbackId });
+  }
+
+  isButtonPressed(args) {
+    const data = args.DATA.trim();
+    if (!data) return false;
+    const idx = this.callbackQueue.findIndex(c => c.data === data);
+    if (idx === -1) return false;
+    const [cb] = this.callbackQueue.splice(idx, 1);
+    this._consumeCallback(cb);
+    return true;
+  }
+
+  isAnyButtonPressed() {
+    if (this.callbackQueue.length === 0) return false;
+    const cb = this.callbackQueue.shift();
+    this._consumeCallback(cb);
+    return true;
+  }
+
+  lastPressedData() {
+    return this.lastConsumedCallback ? this.lastConsumedCallback.data : '';
+  }
+
+  lastPressedSender() {
+    return this.lastConsumedCallback ? this.lastConsumedCallback.from : '';
+  }
+
+  callbacksInQueue() { return this.callbackQueue.length; }
+  clearCallbackQueue() { this.callbackQueue = []; }
+
+  // ---------- РЕДАКТИРОВАНИЕ ----------
+  async _editLastMenu(text, replyMarkup) {
+    const cb = this.lastConsumedCallback;
+    if (!cb || !cb.chatId || !cb.messageId) {
+      console.warn('Нет нажатия для редактирования.');
+      return;
+    }
+    const payload = {
+      chat_id: cb.chatId,
+      message_id: cb.messageId,
+      text: text
+    };
+    if (replyMarkup) payload.reply_markup = replyMarkup;
+    const result = await this._apiRequest('editMessageText', payload);
+    if (!result.ok) console.warn('editMessageText:', result.description);
+  }
+
+  editMessageNoButtons(args) {
+    this._editLastMenu(args.TEXT, { inline_keyboard: [] });
+  }
+
+  editMessageWithMenu(args) {
+    const cleaned = this.keyboard.filter(row => row.length > 0);
+    this._editLastMenu(args.TEXT, { inline_keyboard: cleaned });
+  }
+}
+
+Scratch.extensions.register(new TelegramBotExtension());
